@@ -86,36 +86,4 @@ async def funding_monitor():
             funding = await fetch_funding(sym)
             if not funding:
                 continue
-            rate = float(funding.get("fundingRate", 0))
-            next_time = funding.get("nextFundingTime", "")
-            prev_rate = funding_state.get(sym, 0)
-
-            # Перевірка на поріг ±0.5%
-            if abs(rate) >= FUNDING_THRESHOLD and abs(prev_rate - rate) >= FUNDING_THRESHOLD:
-                msg = f"Symbol: {sym}\nFunding: {rate*100:.3f}%\nNext funding: {next_time}"
-                if CHAT_ID:
-                    try:
-                        await bot.send_message(chat_id=CHAT_ID, text=msg)
-                    except Exception as e:
-                        logger.error(f"Error sending message: {e}")
-                logger.info(msg)
-
-            funding_state[sym] = rate
-
-        await asyncio.sleep(CHECK_INTERVAL)
-
-# ------------ Run Bot ------------
-
-async def funding_monitor_task():
-    await funding_monitor()
-
-if __name__ == "__main__":
-    async def main():
-        monitor_task = asyncio.create_task(funding_monitor_task())
-        await app.run_polling()  # запускає Telegram бота і автоматично ініціалізує Application
-        await monitor_task
-
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped")
+            rate = floa
