@@ -21,7 +21,7 @@ with open(CONFIG_FILE, "r") as f:
     CONFIG = json.load(f)
 
 TELEGRAM_TOKEN = CONFIG.get("telegram_token")
-CHAT_ID = CONFIG.get("chat_id")  # постав свій chat_id тут або через команду /start
+CHAT_ID = CONFIG.get("chat_id")  # заповниться після /start
 
 bot = Bot(token=TELEGRAM_TOKEN)
 app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -32,6 +32,7 @@ funding_state = {}
 # ------------ Bybit REST Functions ------------
 
 async def fetch_usdt_symbols():
+    """Отримує список всіх perpetual USDT контрактів."""
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     params = {"category": "linear"}
     async with aiohttp.ClientSession() as session:
@@ -47,6 +48,7 @@ async def fetch_usdt_symbols():
             return symbols
 
 async def fetch_funding(symbol: str):
+    """Отримує останній фандинг для символу."""
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     params = {"symbol": symbol}
     async with aiohttp.ClientSession() as session:
@@ -104,14 +106,16 @@ async def funding_monitor():
 
 # ------------ Run Bot ------------
 
-async def main():
-    monitor_task = asyncio.create_task(funding_monitor())
-    await app.start()
-    await app.updater.start_polling()
-    await monitor_task
+async def funding_monitor_task():
+    await funding_monitor()
 
 if __name__ == "__main__":
+    async def main():
+        monitor_task = asyncio.create_task(funding_monitor_task())
+        await app.run_polling()  # запускає Telegram бота і автоматично ініціалізує Application
+        await monitor_task
+
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped")
