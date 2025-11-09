@@ -42,8 +42,9 @@ def save_state():
 
 async def fetch_usdt_symbols():
     """Отримує список всіх perpetual USDT контрактів."""
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     async with aiohttp.ClientSession() as session:
-        async with session.get(BYBIT_REST, params={"category": "linear"}) as r:
+        async with session.get(BYBIT_REST, params={"category": "linear"}, headers=headers) as r:
             data = await r.json()
             symbols = [
                 i["symbol"] for i in data["result"]["list"]
