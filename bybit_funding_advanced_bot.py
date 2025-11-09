@@ -1,12 +1,11 @@
 import asyncio
 import aiohttp
-import json
 import logging
+import os
 from telegram import Bot
 from telegram.ext import Application, CommandHandler
 
 # ----------- CONFIG -----------
-CONFIG_FILE = "config.json"
 BYBIT_REST_SYMBOLS = "https://api.bybit.com/v5/market/instruments-info"
 BYBIT_REST_FUNDING = "https://api.bybit.com/v5/market/funding/prev-funding-rate"
 FUNDING_THRESHOLD = 0.005  # 0.5%
@@ -16,12 +15,9 @@ CHECK_INTERVAL = 60  # секунд
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Завантаження токену та chat_id
-with open(CONFIG_FILE, "r") as f:
-    CONFIG = json.load(f)
-
-TELEGRAM_TOKEN = CONFIG.get("telegram_token")
-CHAT_ID = CONFIG.get("chat_id")  # заповниться після /start
+# Завантажуємо токен та chat_id з Environment Variables
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")  # залишаємо None, бот запише при /start
 
 bot = Bot(token=TELEGRAM_TOKEN)
 app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -64,10 +60,7 @@ async def fetch_funding(symbol: str):
 async def start(update, context):
     global CHAT_ID
     CHAT_ID = update.effective_chat.id
-    CONFIG["chat_id"] = CHAT_ID
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f)
-    await update.message.reply_text("Бот активований!")
+    await update.message.reply_text("Бот активований! Ви будете отримувати повідомлення про фандинг.")
 
 app.add_handler(CommandHandler("start", start))
 
@@ -86,4 +79,41 @@ async def funding_monitor():
             funding = await fetch_funding(sym)
             if not funding:
                 continue
-            rate = floa
+            rate = float(funding.get("fundingRate", 0))
+            interval_sec = funding.get("fundingInterval", 3600)
+            hours = interval_sec // 3600
+            minutes = (interval_sec % 3600) // 60
+
+            prev_rate = funding_state.get(sym, 0)
+            if abs(rate) >= FUNDING_THRESHOLD and abs(rate - prev_rate) >= FUNDING_THRESHOLD:
+                if CHAT_ID:
+                    msg = f"{sym}: Funding rate {rate*100:.2f}%\nInterval: {hours}h {minutes}m"
+                    try:
+                        await bot.send_message(chat_id=CHAT_ID, text=msg)
+                    except Exception as e:
+                        logger.error(f"Failed to send message: {e}")
+                funding_state[sym] = rate
+            elif abs(rate) < FUNDING_THRESHOLD:
+                funding_state[sym] = 0  # обнуляємо стан, щоб повідомлення знову надсилались при підйомі
+
+        await asyncio.sleep(CHECK_INTERVAL)
+
+# ------------ Entry Point ------------
+
+async def main():
+    # Запускаємо моніторинг у фоновому режимі
+    monitor_task = asyncio.create_task(funding_monitor())
+
+    # Запускаємо Telegram бота
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # Очікуємо завершення моніторингу
+    await monitor_task
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped manually")
